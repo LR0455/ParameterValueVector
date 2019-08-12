@@ -171,9 +171,22 @@ class ParameterValueVector():
         self.model = Model(self.input_size, self.hidden_size, self.num_layers, self.num_classes).to(self.device)
         self.model.load_state_dict(torch.load(self.model_path))
         self.model.eval()
-        
-    def pvv_model_predict(self, data):
+     
+    def key_merge(self, raw_data):
+        merge_data = {}
+        for data in raw_data:
+            key = data['key'] 
+            pvv = data['pvv']
+            if key not in merge_data:
+                merge_data[key] = pvv
+            else:
+                merge_data[key] += pvv
+
+        return merge_data    
+
+    def pvv_model_predict(self, raw_data):
     
+        data = self.key_merge(raw_data)
 
         for key in data:
             
@@ -183,8 +196,12 @@ class ParameterValueVector():
             
             self.get_model(key)
             
+            print("data : ", data[key])
+
             self.test = self.preprocess(key, data[key], True)
             
+            print("test : ", self.test)
+
             # Test the model
             with torch.no_grad():
                 for i in range(len(self.test) - self.window_size):
@@ -211,8 +228,10 @@ class ParameterValueVector():
     
         print("Finished Predicting")
     
-    def pvv_model_train(self, data):
+    def pvv_model_train(self, raw_data):
         
+        data = self.key_merge(raw_data)
+
         self.data = data.copy()
 
         for key in data:

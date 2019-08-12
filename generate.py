@@ -20,7 +20,7 @@ def generate_data():
     pvv_value_range = 20
     id_range = 5000
 
-    all_data = []
+    raw_data = []
 
     
     pvv_vectors_len = [0, 3, 1, 2, 4, 3]
@@ -44,7 +44,8 @@ def generate_data():
                 pvv.append(random.randint(1, pvv_value_range))
             data['pvv'].append(pvv)
 
-        all_data.append(data)
+            raw_data.append(data)
 
-    #print(all_data)
-    return key_merge(all_data)
+    print(raw_data)
+    
+    return raw_data
