@@ -14,9 +14,9 @@ def key_merge(all_data):
     return merge_data
     
 def generate_data():
-    key_range = 2
-    pvv_range = 5
-    pvv_vector_range = 5
+    key_range = 3
+    pvv_range = 2
+    pvv_vector_range = 10
     pvv_value_range = 20
     id_range = 5000
 
@@ -46,6 +46,6 @@ def generate_data():
 
             raw_data.append(data)
 
-    print(raw_data)
+    # print(raw_data)
     
     return raw_data

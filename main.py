@@ -8,9 +8,9 @@ if __name__ == '__main__':
 
     data = gn.generate_data()
     
-    pvv_model = pvv.ParameterValueVector(2, 1, 64, 2, 100, 300, 2048)
+    pvv_model = pvv.ParameterValueVector(2, 1, 64, 2, 100, 3, 2048)
     pvv_model.pvv_model_train(data)
     
-    data = gn.generate_data()
-    pvv_model.pvv_model_predict(data)
+    # data = gn.generate_data()
+    # pvv_model.pvv_model_predict(data)
     

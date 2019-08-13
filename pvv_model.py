@@ -5,6 +5,7 @@ from tensorboardX import SummaryWriter
 from torch.utils.data import TensorDataset, DataLoader
 import argparse
 import os
+import json
 
 from sklearn.decomposition import PCA
 
@@ -29,7 +30,7 @@ class Model(nn.Module):
 
 class ParameterValueVector():
 
-    # initial 
+    # initial (2, 1, 64, 2, 100, 3, 2048)
     def __init__(self, window_size, input_size, hidden_size,
                        num_layers, num_classes, num_epochs, batch_size):
         
@@ -46,10 +47,10 @@ class ParameterValueVector():
         self.batch_size = batch_size
 
         # Mapping table
-        self.table_fti = {}
-        self.table_itf = {}
-        self.table_ftv = {}
         self.table_kind = {}
+        self.table_vti = {}
+        self.table_itv = {}
+        
         
         # path
         self.model_dir = 'model'
@@ -84,66 +85,91 @@ class ParameterValueVector():
             inputs.append(pvv[i : i + window_size])
             outputs.append(pvv[i + window_size])
     
+        # print("inputs : ", inputs)
+        # print("outputs : ", outputs)
+
         dataset = TensorDataset(torch.tensor(inputs, dtype=torch.float), torch.tensor(outputs))
         return dataset
-
-    def clear_unnecessary_dimension(self, data):
-        data2 = []
-        for i in range(len(data)):
-            data2.append(data[i][0])
-        return data2
-
-    def reduce_data_dimension(self, key, data, test_flag):
-        estimator = PCA(n_components = 1)
-        transform_data = self.clear_unnecessary_dimension(estimator.fit_transform(data))
-        
-        if test_flag == False:
-            self.table_ftv[key] = {}
-
-            for i in range(len(transform_data)):
-                transform_data[i] = round(transform_data[i])
-                self.table_ftv[key][transform_data[i]] = data[i]
-        else:
-            for i in range(len(transform_data)):
-                transform_data[i] = round(transform_data[i])
-   
-        return transform_data
     
-    def mapping_float_to_int(self, key, transform_data, test_flag):
-        if test_flag == False:
-            self.table_kind[key] = 0
-            self.table_fti[key] = {}
-            self.table_itf[key] = {}
+    def check_vector_in_table(self, vector, table):
+        for i in range(len(table)):
+            same = True
+            for j in range(len(vector)):
+                if vector[j] != table[i][j]:
+                    same = False
+                    break
+            if same == True:
+                return True
+        return False
+    
+    def save_mapping_table(self, filename):
+        # clear file
+        open(filename, 'w').close()
 
-            for i in range(len(transform_data)):
-                if transform_data[i] in self.table_fti[key]:
-                    transform_data[i] = self.table_fti[key][transform_data[i]]
+        json_file = {}
+        for key in self.table_kind:
+            json_file[key] = {}
+            json_file[key]['table_kind'] = self.table_kind[key]
+            json_file[key]['table_vti'] = self.table_vti[key]
+            json_file[key]['table_itv'] = self.table_itv[key]
+            
+        with open(filename, 'w') as file:
+            json.dump(json_file, file)
+
+    def get_mapping_table(self, filename):
+        with open(filename) as file:
+            json_file = json.load(file)
+            
+            for key in json_file:
+                key_int = int(key)
+                self.table_kind[key_int] = json_file[key]['table_kind']
+                self.table_vti[key_int] = json_file[key]['table_vti']
+
+                self.table_itv[key_int] = {}
+                for key2 in json_file[key]['table_itv']:
+                    key2_int = int(key2)
+                    self.table_itv[key_int][key2_int] = json_file[key]['table_itv'][key2]
+               
+
+    def mapping_vector_to_int(self, key, data, test_flag):
+        if test_flag == False:
+            if key not in self.table_kind:
+                self.table_vti[key] = {}
+                self.table_itv[key] = {}
+                self.table_kind[key] = 0
+            # print("data : ", data)
+            for i in range(len(data)):
+                if self.check_vector_in_table(data[i], self.table_itv[key]) == True:
+                    data[i] = self.table_vti[key][str(data[i])]
                 else:
-                    self.table_itf[key][self.table_kind[key]] = transform_data[i]
-                    self.table_fti[key][transform_data[i]] = self.table_kind[key]
-                    transform_data[i] = self.table_kind[key]
+                    self.table_itv[key][self.table_kind[key]] = data[i]
+                    self.table_vti[key][str(data[i])] = self.table_kind[key]
+                    data[i] = self.table_kind[key]
                     self.table_kind[key] += 1
+            
+            # print("table_vti : ", self.table_vti[key])
+            # print("table_itv : ", self.table_itv[key])
+            # print("transform_data : ", data)
         else:
-            for i in range(len(transform_data)):
-                if transform_data[i] in self.table_fti[key]:
-                    transform_data[i] = self.table_fti[key][transform_data[i]]
-        
-        return transform_data
-    
+            for i in range(len(data)):
+                if data[i] in self.table_fti[key]:
+                    data[i] = self.table_fti[key][data[i]]
+
+        return data
+
     def preprocess(self, key, data, test_flag):
-        transform_data = self.reduce_data_dimension(key, data, test_flag)
-        transform_data = self.mapping_float_to_int(key, transform_data, test_flag)
+        transform_data = self.mapping_vector_to_int(key, data, test_flag)
         return transform_data
     
     def model_preprocess(self, key, data):
         
         self.num_classes = self.table_kind[key]
-
+       
         self.model = Model(self.input_size, self.hidden_size, self.num_layers, self.num_classes).to(self.device)
-
+        
         self.seq_dataset = self.generate_tensor_dataset(data[key])
 
-        self.dataloader = DataLoader(self.seq_dataset, batch_size = self.batch_size, shuffle = True, pin_memory = True)
+        self.dataloader = DataLoader(self.seq_dataset, batch_size = self.batch_size, pin_memory = True)
 
         # Loss and optimizer
         self.criterion = nn.CrossEntropyLoss()
@@ -192,15 +218,15 @@ class ParameterValueVector():
             
             self.num_classes = self.table_kind[key]
     
-            print("log key : ", key, " predicting ...")
+            # print("log key : ", key, " predicting ...")
             
             self.get_model(key)
             
-            print("data : ", data[key])
+            # print("data : ", data[key])
 
             self.test = self.preprocess(key, data[key], True)
             
-            print("test : ", self.test)
+            # print("test : ", self.test)
 
             # Test the model
             with torch.no_grad():
@@ -224,12 +250,20 @@ class ParameterValueVector():
                     if (pdt - lbl)*(pdt - lbl) >= self.threshold:
                         print("log key : ", key, " ", self.table_ftv[key][lbl], " is anomaly")
      
-            print("log key : ", key, " predict finish")
+        #     print("log key : ", key, " predict finish")
     
-        print("Finished Predicting")
+        # print("Finished Predicting")
     
     def pvv_model_train(self, raw_data):
+
+        if os.path.isfile('mapping_table.json'):
+            self.get_mapping_table('mapping_table.json')
+
+        # print("kind : ", self.table_kind)
+        # print("vti : ", self.table_vti)
+        # print("itv : ", self.table_itv)
         
+
         data = self.key_merge(raw_data)
 
         self.data = data.copy()
@@ -237,22 +271,26 @@ class ParameterValueVector():
         for key in data:
 
             data[key] = self.preprocess(key, data[key], False)
-
-            self.model_preprocess(key, data)
             
+            self.model_preprocess(key, data)
+
             self.writer = SummaryWriter(logdir='log/' + self.log)
 
-            print(str(key) + " training ...")
-    
+            # print(str(key) + " training ...")
+
             for epoch in range(self.num_epochs):  # Loop over the dataset multiple times
+            # for epoch in range(1):
                 self.train_loss = 0
                 for (seq, label) in self.dataloader:
+                    # print("seq : ", seq)
                     self.forward_and_backward(seq, label)
                    
-                print('Epoch [{}/{}], Train_loss: {:.4f}'.format(epoch + 1, self.num_epochs, self.train_loss / len(self.dataloader.dataset)))
+                # print('Epoch [{}/{}], Train_loss: {:.4f}'.format(epoch + 1, self.num_epochs, self.train_loss / len(self.dataloader.dataset)))
                 self.writer.add_scalar('train_loss', self.train_loss / len(self.dataloader.dataset), epoch + 1)
             
             self.save_model(key)
+            self.save_mapping_table('mapping_table.json')
             self.writer.close()
+            
             print('Finished Training')    
         
