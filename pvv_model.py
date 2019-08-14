@@ -74,6 +74,7 @@ class ParameterValueVector():
         self.test = None
         self.predicted = None
         self.threshold = 10
+        self.filter_test = None
 
     def generate_tensor_dataset(self, pvv):
     
@@ -152,8 +153,8 @@ class ParameterValueVector():
             # print("transform_data : ", data)
         else:
             for i in range(len(data)):
-                if data[i] in self.table_fti[key]:
-                    data[i] = self.table_fti[key][data[i]]
+                if self.check_vector_in_table(data[i], self.table_itv[key]) == True:
+                    data[i] = self.table_vti[key][str(data[i])]
 
         return data
 
@@ -176,16 +177,17 @@ class ParameterValueVector():
         self.optimizer = optim.Adam(self.model.parameters())
     
     def forward_and_backward(self, seq, label):
-         # Forward pass
-         seq = seq.clone().detach().view(-1, self.window_size, self.input_size).to(self.device)
-         output = self.model(seq)
-         loss = self.criterion(output, label.to(self.device))
+                   
+        # Forward pass
+        seq = seq.clone().detach().view(-1, self.window_size, self.input_size).to(self.device)
+        output = self.model(seq)
+        loss = self.criterion(output, label.to(self.device))
 
-         # Backward and optimize
-         self.optimizer.zero_grad()
-         loss.backward()
-         self.train_loss += loss.item()
-         self.optimizer.step()
+        # Backward and optimize
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.train_loss += loss.item()
+        self.optimizer.step()
 
     def save_model(self, key):
         if not os.path.isdir(self.model_dir):
@@ -222,21 +224,25 @@ class ParameterValueVector():
             
             self.get_model(key)
             
-            # print("data : ", data[key])
+            print("data : ", data[key])
 
             self.test = self.preprocess(key, data[key], True)
             
-            # print("test : ", self.test)
+            print("test : ", self.test)
+
+            self.filter_test = []
+            for i in range(len(self.test)):
+                if type(self.test[i]) is not list:
+                    self.filter_test.append(self.test[i])
+                
+            print("filter_test : ", self.filter_test)
 
             # Test the model
             with torch.no_grad():
-                for i in range(len(self.test) - self.window_size):
+                for i in range(len(self.filter_test) - self.window_size):
                     
-                    seq = self.test[i:i + self.window_size]
-                    label = self.test[i + self.window_size]
-                    
-                    if label not in self.table_ftv[key]:
-                        continue
+                    seq = self.filter_test[i:i + self.window_size]
+                    label = self.filter_test[i + self.window_size]
                     
                     seq = torch.tensor(seq, dtype = torch.float).view(-1, self.window_size, self.input_size).to(self.device)
                     label = torch.tensor(label).view(-1).to(self.device)
@@ -244,11 +250,15 @@ class ParameterValueVector():
                     output = self.model(seq)
                     predicted = torch.argsort(output, 1)[0][-1:]
                     
-                    pdt = self.table_itf[key][int(predicted)]
-                    lbl = self.table_itf[key][int(label)]
-                    
-                    if (pdt - lbl)*(pdt - lbl) >= self.threshold:
-                        print("log key : ", key, " ", self.table_ftv[key][lbl], " is anomaly")
+                    pdt_v = self.table_itv[key][int(predicted)]
+                    lbl_v = self.table_itv[key][int(label)] 
+                     
+                    SSE = 0
+                    for i in range(len(pdt_v)):
+                        SSE += (pdt_v[i] - lbl_v[i]) * (pdt_v[i] - lbl_v[i])
+
+                    if SSE >= self.threshold:
+                        print("log key : ", key, " ", lbl_v, " is anomaly")
      
         #     print("log key : ", key, " predict finish")
     

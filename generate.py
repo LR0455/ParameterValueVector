@@ -1,18 +1,5 @@
 import random
 
-def key_merge(all_data):
-    merge_data = {}
-    for data in all_data:
-        key = data['key'] 
-        pvv = data['pvv']
-        if key not in merge_data:
-            merge_data[key] = pvv
-        else:
-            merge_data[key] += pvv
-    
-    # print(merge_data)
-    return merge_data
-    
 def generate_data():
     key_range = 3
     pvv_range = 2
